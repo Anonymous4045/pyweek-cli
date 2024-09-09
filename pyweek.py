@@ -238,25 +238,39 @@ def run(file: Path):
         zipped_file.extractall(temp_dir)
         top_level_dir = next(temp_dir.iterdir())
 
+    # No pint in trying if there is no run_game.py
+    run_game = temp_dir / top_level_dir / 'run_game.py'
+    if not run_game.exists():
+        click.echo("No run_game.py file found. Exiting...")
+        sys.exit(1)
+
     # Set up the venv
     venv_dir = temp_dir / 'venv'
     subprocess.run([sys.executable, '-m', 'venv', venv_dir])
     python = venv_dir / 'bin' / 'python'
     pip = venv_dir / 'bin' / 'pip'
-    subprocess.run([pip, 'install', '-r', temp_dir / top_level_dir / 'requirements.txt'])
+
+    # Check if the requirements.txt file exists
+    requirements = temp_dir / top_level_dir / 'requirements.txt'
+    if not requirements.exists():
+        click.echo("No requirements.txt file found. Attempting to run anyway...\n")
+    else:
+        click.echo("Installing requirements...\n")
+        subprocess.run([pip, 'install', '-r', requirements])
 
     # Show the README rendered in the terminal
     readme = temp_dir / top_level_dir / 'README.md'
-    contents = readme.read_text()
-
-    console = Console()
-    click.echo("\nREADME.md")
-    console.print(Markdown(contents))
-
-    input("\nPress Enter after reading to play...")
+    if not readme.exists():
+        click.echo("No README.md file found. Attempting to run anyway...\n")
+        input("\nPress Enter to play...")
+    else:
+        contents = readme.read_text()
+        console = Console()
+        click.echo("\nREADME.md")
+        console.print(Markdown(contents))
+        input("\nPress Enter after reading to play...")
 
     # Run the game
-    run_game = temp_dir / top_level_dir / 'run_game.py'
     subprocess.run([python, run_game])
 
 
