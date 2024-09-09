@@ -2,6 +2,7 @@
 
 Download and verify entries for a given challenge:
 """
+import subprocess
 import sys
 import os
 import re
@@ -9,10 +10,13 @@ from pathlib import Path
 import time
 from packaging import version
 import zipfile
+import tempfile
 
 import requests
 import click
 import progressbar
+from rich.console import Console
+from rich.markdown import Markdown
 
 __version__ = '0.5.3'
 PYWEEK_URL = 'https://pyweek.org'
@@ -135,6 +139,9 @@ def download(challenge, directory):
 def verify(file: Path):
     """Determines if a given zip file is in the proper format."""
 
+    in_correct_format(file)
+
+def in_correct_format(file: Path):
     errors = 0
 
     def error(msg, critical=False):
@@ -207,8 +214,50 @@ def verify(file: Path):
 
     if errors:
         error(f"{errors} error{"s" if errors > 1 else ""} occurred while verifying file {file}.")
+        return False
     else:
-        click.echo(click.style(f"File {file} is valid.", fg='green'))
+        click.echo(click.style(f"File {file} is in a valid format.", fg='green'))
+        return True
+
+@cli.command()
+@click.argument(
+    'file',
+    type=Path,
+)
+def run(file: Path):
+    """Extract and run the specified game from the zip file."""
+
+    if not in_correct_format(file):
+        click.echo("\nImproperly formatted file. Attempting to run anyway...\n")
+    else:
+        click.echo("\nSetting up venv...\n")
+
+    # Extract the zip file to a temporary directory
+    temp_dir = Path(tempfile.mkdtemp())
+    with zipfile.ZipFile(file, 'r') as zipped_file:
+        zipped_file.extractall(temp_dir)
+        top_level_dir = next(temp_dir.iterdir())
+
+    # Set up the venv
+    venv_dir = temp_dir / 'venv'
+    subprocess.run([sys.executable, '-m', 'venv', venv_dir])
+    python = venv_dir / 'bin' / 'python'
+    pip = venv_dir / 'bin' / 'pip'
+    subprocess.run([pip, 'install', '-r', temp_dir / top_level_dir / 'requirements.txt'])
+
+    # Show the README rendered in the terminal
+    readme = temp_dir / top_level_dir / 'README.md'
+    contents = readme.read_text()
+
+    console = Console()
+    click.echo("\nREADME.md")
+    console.print(Markdown(contents))
+
+    input("\nPress Enter after reading to play...")
+
+    # Run the game
+    run_game = temp_dir / top_level_dir / 'run_game.py'
+    subprocess.run([python, run_game])
 
 
 CHUNK_SIZE = 10240
